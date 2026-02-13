@@ -13,19 +13,16 @@ app.use(bodyParser.json());
 // Load OpenAPI spec (served at /openapi.yaml and used by swagger ui)
 const openapi = YAML.load('./openapi.yaml');
 
-// Helper: createEcdsaSignature(payloadString) -> base64 signature
 function signPayload(payloadString) {
   const privKeyPem = process.env.SIGNER_PRIVATE_KEY_PEM;
   if (!privKeyPem) {
-    // fallback: ephemeral demo key (NOT secure) for demo seals when no secret set
-    const { privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'secp256k1' });
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'secp256k1' });
     const sign = crypto.createSign('SHA256');
     sign.update(payloadString);
     sign.end();
-    return {
-      signature: sign.sign(privateKey, 'base64'),
-      pubkey: privateKey.export({ type: 'spki', format: 'pem' }) // not ideal, but demo only
-    };
+    const signature = sign.sign(privateKey, 'base64');
+    const pubPem = publicKey.export({ type: 'spki', format: 'pem' });
+    return { signature, pubkey: pubPem };
   }
   const sign = crypto.createSign('SHA256');
   sign.update(payloadString);
@@ -34,6 +31,7 @@ function signPayload(payloadString) {
   const pubkey = process.env.SIGNER_PUBKEY || null;
   return { signature, pubkey };
 }
+
 
 // Root: metadata
 app.get('/', (req, res) => {

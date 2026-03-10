@@ -98,10 +98,11 @@ app.post('/timestamp', async (req, res) => {
     fs.appendFileSync('./issued_seals.log', JSON.stringify(seal) + '\n');
   } catch (e) {}
   res.json(seal);
-  
+});
+
 // use env PORT if present (Fly sets it), otherwise default to 8000
 const port = process.env.PORT || 8000;
 app.listen(port, () => {
-console.log(`time-authority running on :${port}`);
+  console.log(`time-authority running on :${port}`);
 });
 

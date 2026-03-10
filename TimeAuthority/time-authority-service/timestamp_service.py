@@ -8,9 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime, timezone
 import hashlib
-import random
+import uuid
 import json
 import os
+import fcntl
 from typing import Optional
 
 app = FastAPI(
@@ -33,8 +34,8 @@ PRICE_USDC = 0.01  # $0.01 USD in USDC
 PAYMENT_NETWORK = "base"  # Base network (Coinbase L2)
 PAYMENT_TOKEN = "USDC"
 
-# Your Coinbase wallet address on Base network
-RECIPIENT_ADDRESS = "0x9A51D52CcbeB0C414d1C4A0feC6fe345A169C1a4"
+# Your Coinbase wallet address on Base network (set via RECIPIENT_ADDRESS env var)
+RECIPIENT_ADDRESS = os.environ.get("RECIPIENT_ADDRESS", "0x9A51D52CcbeB0C414d1C4A0feC6fe345A169C1a4")
 
 # Transaction log file
 TRANSACTION_LOG = "transaction_log.jsonl"
@@ -56,18 +57,22 @@ class TimestampResponse(BaseModel):
     signature: str
 
 def generate_transaction_id() -> str:
-    """Generate random 8-digit transaction ID"""
-    return str(random.randint(10000000, 99999999))
+    """Generate unique transaction ID using UUID4"""
+    return str(uuid.uuid4())
 
 def hash_document(content: str) -> str:
     """Generate SHA-256 hash of document content"""
     return hashlib.sha256(content.encode()).hexdigest()
 
 def log_transaction(transaction_data: dict):
-    """Log transaction to file for your records"""
+    """Log transaction to file for your records (thread-safe)"""
     with open(TRANSACTION_LOG, 'a') as f:
-        json.dump(transaction_data, f)
-        f.write('\n')
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            json.dump(transaction_data, f)
+            f.write('\n')
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
 
 def create_x402_payment_response(request: Request) -> dict:
     """Create x402 payment required response"""
@@ -129,7 +134,7 @@ async def create_timestamp(
     # Payment header present - verify and process
     try:
         payment_data = json.loads(payment_header)
-    except:
+    except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid payment header")
     
     # In production, you would verify the payment with Coinbase's facilitator
